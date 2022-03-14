@@ -1,3 +1,4 @@
+import os
 from numpy import not_equal
 from klusta.kwik import KwikModel
 import numpy as np
@@ -49,15 +50,37 @@ class DataSource():
             self.default_model = self.models[name]
         self.model_names = list(self.models.keys())
 
+    def load_database(self,path):
+        """! @brief Loads a database from a folder.
+
+        Parameters: 
+        path: path of the database folder.
+
+        Returns:
+        name of every model in database.
+        """
+
+        for animal in os.listdir(path):
+            for shank in os.listdir(os.path.join(path,animal)):
+                if shank.endswith('.kwik'):
+                   self.add_model(path = os.path.join(path,animal,shank), name = (animal.replace('-','/') + ' Shank ' + shank.split('.')[0].split('_')[-1][1:]))
+
+        self.delete_unsorted_models()
+
+        return self.model_names
+       
     def delete_model(self,model_name):
         del self.models[model_name]
         self.model_names = list(self.models.keys())
 
     def delete_unsorted_models(self):
+        count = 0
         for model in self.model_names:
             groups = self.models[model].list_of_groups()
             if 'unsorted' in groups:
+                count += 1
                 self.delete_model(model_name=model)
+        print('{} unsorted models have been deleted'.format(count))
 
     def inst_fr(self,model_name = None,a = None, b = None, clu_list = None,bin_size=50e-3,mean = True):
         """! @brief Returns the instant fire rate of a group of clusters.
@@ -86,12 +109,12 @@ class DataSource():
         spikes = model.get_spike_times(a=a,b=b,clu_list=clu_list,return_mode='list')
         t=np.arange(a,b,bin_size)
         count, edges = np.histogram(spikes,bins=t)
-        fr=pd.Series(count, index=edges[0:-1])
+        fr=pd.Series(count/bin_size, index=edges[0:-1])
         if mean is True:
             fr = fr/len(clu_list)
         return fr
 
-    def get_CV(self, model_name = None, a=None, b=None, clu_list=None, bin_size=50e-3, width=10, T=None):
+    def get_CV(self, model_name = None, a=None, b=None, clu_list=None, bin_size=50e-3, window_size=10, T=None):
         """! @brief Returns the CV of a group of clusters.
 
         Parameters: 
@@ -114,10 +137,10 @@ class DataSource():
         fr = self.inst_fr(model_name = model_name, a = a, b = b, clu_list= clu_list,bin_size = bin_size)
         
         if (T is None):
-            T=np.arange(a,b,bin_size)
+            T=np.arange(a,b,window_size)
         cv=pd.Series(index=T)
         for t in T:
-            samples=fr.loc[t:t+width]
+            samples=fr.loc[t:t+window_size]
             mu=samples.mean()
             sigma=samples.std()
             if mu != 0:
@@ -141,8 +164,7 @@ class DataSource():
         spk = model.get_spike_times(a=a,b=b,return_mode='series')
         
         if clu_list is None:
-            clu_list = model.get_non_noisy_clusters()
-        print(clu_list)
+            clu_list = self.get_SUA_clusters(model_name=model_name)
 
         for clu in clu_list:
             clu_spk = spk[spk==clu]
@@ -237,6 +259,15 @@ class DataSource():
         else:
             return False
 
+    def get_cluster_spikes_count(self,cluster,model_name = None):
+        """! @brief returns the number of spikes in a cluster.
+        """
+
+        model = self.__select_model(model_name) 
+        spk = model.get_spike_times(clu_list=[cluster],return_mode='series')
+        return len(spk)
+
+        
     def unit_ids(self,model_name = None):
         """! @brief Returns list of non noise clusters.
 
@@ -247,6 +278,23 @@ class DataSource():
         clu_series = model.groups(return_mode = 'series')
         clu_series = clu_series[clu_series.values != 'noise']
         return clu_series
+
+    def firing_rate_of_population(self,a = None, b = None, model_name = None):
+        """! @brief Returns the mean fr of the MUA group.      
+
+        Author: Gabriel G Gadelha
+        Date: 11.aug.2021
+        """
+        model = self.__select_model(model_name)
+
+        if a == None:
+            a = 0
+        if b == None:
+            b = model.duration()
+            
+        clusters = model.get_non_noisy_clusters()
+        spk = model.get_spike_times(a=a,b=b,clu_list=clusters,return_mode='list')
+        return (len(spk)/(b - a))
 
     def firing_rate_of_MUA(self,a = None, b = None, model_name = None):
         """! @brief Returns the mean fr of the MUA group.      
@@ -286,7 +334,7 @@ class DataSource():
         group_fr = {}
         model = self.__select_model(model_name)
         if clu_list is None:
-            clu_list = model.get_non_noisy_clusters()
+            clu_list = self.get_SUA_clusters(model_name=model_name)
         if a is None:
             a = 0
         if b is None:
@@ -335,7 +383,9 @@ class DataSource():
           Date: 15.07.2021
           """
         isi = self.get_isi(model_name = model_name,clu_list=[cluster_id])
-        contamination = (len(isi[isi<=1e-3]))/(len(isi))
+        isi = pd.Series(isi)
+        contamined = isi[isi<=1e-3]
+        contamination = (len(contamined))/(len(isi))
         return contamination*100
     
     def get_group_contamination(self,cluster_group,model_name = None):

@@ -23,7 +23,7 @@ class KwikFile(Scaffold):
             self.kwik_model=KwikModel(path)
             if (name is None):
                 self.name = self.kwik_model.name
-            print ("Created class on = %s !" % path)
+            # print ("Adding model %s" % path)
         else:
             print ("You need to define the kwikfile path (kpath).\n You can use the function set_file_path(kpath)")
 
