@@ -1,6 +1,4 @@
 import os
-from numpy import not_equal
-from klusta.kwik import KwikModel
 import numpy as np
 import pandas as pd
 
@@ -170,7 +168,9 @@ class DataSource():
             clu_spk = spk[spk==clu]
             isi = np.diff(list(clu_spk.index))
             isi_list+=list(isi)
-
+        
+        isi_list = np.asarray(isi_list)
+        isi_list = list(isi_list[isi_list>1e-3])
         return isi_list
 
     def single_unit_spikes (self, unit_id, model_name = None, a=None, b=None):

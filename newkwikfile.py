@@ -11,7 +11,6 @@ class KwikFile(Scaffold):
     @date: 2021.Jul.27
     """
     
-
     def __init__(self,path=None,name=None):
         
         
